@@ -1637,8 +1637,17 @@ recv_data(Stream, Frame) ->
             %% anyway.
             ok;
         Pid ->
+            NotifyPid = h2_stream_set:notify_pid(Stream),
+            recv_data_cb(NotifyPid, Frame),
             h2_stream:send_event(Pid, {recv_data, Frame})
     end.
+
+recv_data_cb(Pid, {#frame_header{
+                  type=?DATA
+                 }, Payload}) ->
+    Bin = h2_frame_data:data(Payload),
+    Pid ! {'RECV_DATA', Bin};
+recv_data_cb(_, _) -> ok.
 
 send_request(NextId, NotifyPid, Conn, Streams, Headers, Body) ->
     case
