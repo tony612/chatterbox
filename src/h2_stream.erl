@@ -350,12 +350,12 @@ open(cast, {recv_data,
 %% Trailers
 open(cast, {recv_h, Trailers},
      #stream_state{}=Stream) ->
-    case is_valid_headers(request, Trailers) of
+    case is_valid_headers(response, Headers) of
         ok ->
             {next_state,
              open,
              Stream#stream_state{
-               request_headers=Stream#stream_state.request_headers ++ Trailers
+               response_headers=Stream#stream_state.response_headers ++ Headers
               }};
         {error, Code} ->
             rst_stream_(Code, Stream)
@@ -440,7 +440,7 @@ half_closed_local(cast,
           {next_state,
            half_closed_local,
            Stream#stream_state{
-             response_headers=Headers}};
+             response_headers=Stream#stream_state.response_headers ++ Headers}};
       {error, Code} ->
           rst_stream_(Code, Stream)
   end;
