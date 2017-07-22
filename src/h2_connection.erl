@@ -1693,3 +1693,11 @@ send_request(NextId, NotifyPid, Conn, Streams, Headers, Body) ->
 
             {ok, GoodStreamSet}
     end.
+
+recv_data_cb(Pid, {#frame_header{
+                  stream_id=StreamId,
+                  type=?DATA
+                 }, Payload}) ->
+    Bin = h2_frame_data:data(Payload),
+    Pid ! {'RECV_DATA', StreamId, Bin};
+recv_data_cb(_, _) -> ok.
