@@ -1361,13 +1361,13 @@ send_ack_timeout(SS) ->
 
 %% private socket handling
 active_once(Socket) ->
-    sock:setopts(Socket, [{active, once}]).
+    sock:setopts(Socket, [{active, 1000}]).
 
 client_options(Transport, SSLOptions) ->
     ClientSocketOptions = [
                            binary,
                            {packet, raw},
-                           {active, once}
+                           {active, 1000}
                           ],
     case Transport of
         ssl ->
