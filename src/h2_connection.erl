@@ -15,6 +15,8 @@
 
 %% HTTP Operations
 -export([
+         begin_request/2,
+         begin_request/3,
          send_headers/3,
          send_headers/4,
          send_body/3,
@@ -258,6 +260,11 @@ send_body(Pid, StreamId, Body, Opts) ->
 send_request(Pid, Headers, Body) ->
     gen_statem:call(Pid, {send_request, self(), Headers, Body}, infinity),
     ok.
+
+begin_request(Pid, Headers) ->
+    begin_request(Pid, Headers, 5000).
+begin_request(Pid, Headers, Timeout) ->
+    gen_fsm:sync_send_all_state_event(Pid, {begin_request, self(), Headers}, Timeout).
 
 -spec send_ping(pid()) -> ok.
 send_ping(Pid) ->
@@ -1168,6 +1175,22 @@ handle_event({call, From}, {new_stream, NotifyPid},
                                  next_available_stream_id=NextId+2,
                                  streams=NewStreams
                                 }, [{reply, From, Reply}]};
+handle_event({call, From}, {begin_request, NotifyPid, Headers},
+        #connection{
+            streams=Streams,
+            next_available_stream_id=NextId
+        }=Conn) ->
+    {Reply, NewStreams} =
+        case begin_request(NextId, NotifyPid, Conn, Streams, Headers) of
+            {ok, GoodStreamSet} ->
+                {NextId, GoodStreamSet};
+            {error, Code} ->
+                {{error, Code}, Streams}
+        end,
+    {reply, Reply, Conn#connection{
+                                 next_available_stream_id=NextId+2,
+                                 streams=NewStreams
+                                }};
 handle_event({call, From}, is_push,
                   #connection{
                      peer_settings=#settings{enable_push=Push}
@@ -1666,6 +1689,31 @@ recv_data_cb(Pid, {#frame_header{
     Bin = h2_frame_data:data(Payload),
     Pid ! {'RECV_DATA', StreamId, Bin};
 recv_data_cb(_, _) -> ok.
+
+begin_request(NextId, NotifyPid, Conn, Streams, Headers) ->
+    case
+        h2_stream_set:new_stream(
+            NextId,
+            NotifyPid,
+            Conn#connection.stream_callback_mod,
+            Conn#connection.stream_callback_opts,
+            Conn#connection.socket,
+            Conn#connection.peer_settings#settings.initial_window_size,
+            Conn#connection.self_settings#settings.initial_window_size,
+            Streams)
+    of
+        {error, Code, _NewStream} ->
+            lager:warning("[~p] tried to create new_stream ~p, but error ~p",
+                [Conn#connection.type, NextId, Code]),
+            {error, Code};
+        GoodStreamSet ->
+            lager:debug("[~p] added stream #~p to ~p",
+                [Conn#connection.type, NextId, GoodStreamSet]),
+
+            send_headers(self(), NextId, Headers),
+
+            {ok, GoodStreamSet}
+    end.
 
 send_request(NextId, NotifyPid, Conn, Streams, Headers, Body) ->
     case
