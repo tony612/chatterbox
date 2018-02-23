@@ -264,7 +264,7 @@ send_request(Pid, Headers, Body) ->
 begin_request(Pid, Headers) ->
     begin_request(Pid, Headers, 5000).
 begin_request(Pid, Headers, Timeout) ->
-    gen_fsm:sync_send_all_state_event(Pid, {begin_request, self(), Headers}, Timeout).
+    gen_statem:call(Pid, {begin_request, self(), Headers}, Timeout).
 
 -spec send_ping(pid()) -> ok.
 send_ping(Pid) ->
@@ -1187,10 +1187,10 @@ handle_event({call, From}, {begin_request, NotifyPid, Headers},
             {error, Code} ->
                 {{error, Code}, Streams}
         end,
-    {reply, Reply, Conn#connection{
+    {keep_state, Conn#connection{
                                  next_available_stream_id=NextId+2,
                                  streams=NewStreams
-                                }};
+                                }, [{reply, From, Reply}]};
 handle_event({call, From}, is_push,
                   #connection{
                      peer_settings=#settings{enable_push=Push}
